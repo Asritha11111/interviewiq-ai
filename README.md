@@ -1,10 +1,10 @@
 # 🎯 InterviewIQ AI
 
-[![Python Version](https://img.shields.key/badge/python-3.10%2B-blue.svg)](https://www.python.org/)
-[![Streamlit App](https://img.shields.key/badge/Streamlit-FF4B4B?logo=Streamlit&logoColor=white)](https://streamlit.io/)
-[![Google Gemini](https://img.shields.key/badge/Gemini%202.5%20Flash-8E75C2?logo=Google&logoColor=white)](https://ai.google.dev/)
-[![Model Context Protocol](https://img.shields.key/badge/MCP-JSON--RPC-blue)](https://modelcontextprotocol.io/)
-[![Tests Passing](https://img.shields.key/badge/tests-passing-emerald.svg)](https://pytest.org/)
+[![Python Version](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/)
+[![Streamlit App](https://img.shields.io/badge/Streamlit-FF4B4B?logo=streamlit&logoColor=white)](https://streamlit.io/)
+[![Google Gemini](https://img.shields.io/badge/Gemini_2.5_Flash-8E75C2?logo=google&logoColor=white)](https://ai.google.dev/)
+[![Model Context Protocol](https://img.shields.io/badge/MCP-Protocol-5B5B5B)](https://modelcontextprotocol.io/)
+[![Tests Passing](https://img.shields.io/badge/tests-passing-brightgreen)](https://pytest.org/)
 
 An agentic, AI-powered mock technical interview and candidate evaluation system. Leveraging **Google Gemini 2.5 Flash**, the **Google Agent Development Kit (ADK)**, and the **Google Developer Knowledge MCP**, InterviewIQ AI conducts realistic mock interviews, evaluates answer accuracy dynamically, retrieves official documentation context on-the-fly, and generates specialized study guides to help candidates level up.
 
