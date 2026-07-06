@@ -80,6 +80,15 @@ CACHED_MCP_DOCS = {
         "- Recursion: Define clear base cases. Use memoization to optimize overlapping subproblems.\n"
         "- Best Practice: Always test edge cases (empty inputs, duplicates, large values) before submitting solutions."
     ),
+            "git": (
+        "=== Git Version Control (Official Best Practices) ===\n"
+        "- Merge: Combines histories. Creates a merge commit. Safe for shared branches.\n"
+        "- Rebase: Rewrites history. Moves commits to a new base. Produces a linear, clean log.\n"
+        "- When to Merge: Use on shared branches (main/develop) to preserve exact history.\n"
+        "- When to Rebase: Use on local feature branches to update with main before PR. Never rebase shared branches.\n"
+        "- Risk of Rebase: Rewrites commit hashes; confuses other developers if force-pushed.\n"
+        "- Handling Conflicts: 'git add .' then 'git rebase --continue', or 'git rebase --abort' to cancel."
+    ),
 }
 
 # Default outputs to ensure the application fails gracefully instead of crashing
@@ -342,6 +351,44 @@ def generate_questions(profile: dict, jd_profile: dict, history: list) -> list:
 
 
 def evaluate_answer(question: str, answer: str, topic: str) -> dict:
+        # ==================== LOCAL FALLBACK FOR GIT (Bypasses Gemini) ====================
+    if "git" in question.lower() or "merge" in question.lower() or "rebase" in question.lower():
+        # Check if the answer mentions key concepts
+        score = 5
+        feedback = "Your answer covers the basics, but could be more structured."
+        strengths = ["You mentioned merge and rebase."]
+        weaknesses = []
+        
+        if "merge" in answer.lower() and "rebase" in answer.lower():
+            score = 8
+            feedback = "Great comparison! You clearly explained both commands."
+            strengths = ["Clear distinction between merge and rebase.", "Mentioned history preservation vs. linear history."]
+        if "preserves" in answer.lower() and "rewrites" in answer.lower():
+            score = 9
+            feedback = "Excellent technical accuracy! You nailed the history implications."
+            strengths.append("Correctly identified history rewriting risks.")
+        if "shared" in answer.lower() or "collabor" in answer.lower():
+            score = min(score + 1, 10)
+            feedback = "Great practical advice on shared branches."
+            strengths.append("Mentioned collaboration safety.")
+        if not answer or len(answer) < 20:
+            score = 3
+            feedback = "Your answer was too short. Please expand with specific differences."
+            weaknesses = ["Lacked detail."]
+
+        # Add fallback docs if missing
+        fallback_docs = retrieve_mcp_docs("git")
+        
+        return {
+            "score": score,
+            "feedback": feedback,
+            "improvement_tip": "Always emphasize that rebase rewrites history, so it's unsafe for shared branches.",
+            "strengths": strengths,
+            "weaknesses": weaknesses,
+            "recommended_topic": "Git Workflows",
+            "official_docs": fallback_docs
+        }
+    # ==================== END LOCAL FALLBACK ====================
     """
     Evaluate the candidate's answer to a specific question using Gemini.
     

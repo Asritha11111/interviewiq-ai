@@ -25,6 +25,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
+
 # Apply high-end modern styling for visual excellence and responsive layout
 st.markdown("""
 <style>
