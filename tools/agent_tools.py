@@ -63,7 +63,6 @@ CACHED_MCP_DOCS = {
         "- Visuals: Use plotly.graph_objects or plotly.express for interactive visualizations.\n"
         "- Streamlit: Render charts seamlessly via st.plotly_chart(fig)."
     ),
-    # ==================== NEWLY ADDED FOR YOUR LEARNING PLAN ====================
     "communication": (
         "=== Effective Communication in Tech (Official Best Practices) ===\n"
         "- Active Listening: Focus fully on the speaker, confirm understanding by paraphrasing.\n"
@@ -72,7 +71,7 @@ CACHED_MCP_DOCS = {
         "- Written Communication: Use clear subject lines, bullet points, and concise language in emails and PRs.\n"
         "- Feedback: Actively seek and give constructive feedback to improve team dynamics."
     ),
-        "data structures and algorithms": (
+    "data structures and algorithms": (
         "=== Data Structures & Algorithms (Official Reference) ===\n"
         "- Core Structures: Arrays (O(1) access), Hash Maps (O(1) avg lookup), Trees (BST, AVL - O(log n)), Graphs (BFS/DFS).\n"
         "- Algorithm Paradigms: Divide & Conquer (Merge/Quick Sort), Dynamic Programming (Knapsack, LCS), Greedy (Dijkstra's).\n"
@@ -80,7 +79,7 @@ CACHED_MCP_DOCS = {
         "- Recursion: Define clear base cases. Use memoization to optimize overlapping subproblems.\n"
         "- Best Practice: Always test edge cases (empty inputs, duplicates, large values) before submitting solutions."
     ),
-            "git": (
+    "git": (
         "=== Git Version Control (Official Best Practices) ===\n"
         "- Merge: Combines histories. Creates a merge commit. Safe for shared branches.\n"
         "- Rebase: Rewrites history. Moves commits to a new base. Produces a linear, clean log.\n"
@@ -89,13 +88,32 @@ CACHED_MCP_DOCS = {
         "- Risk of Rebase: Rewrites commit hashes; confuses other developers if force-pushed.\n"
         "- Handling Conflicts: 'git add .' then 'git rebase --continue', or 'git rebase --abort' to cancel."
     ),
-            "general": (
+    "general": (
         "=== General Interview Best Practices ===\n"
         "- Structure your answer clearly: Present, Past, Future.\n"
         "- Highlight your key skills and experiences relevant to the role.\n"
         "- Show enthusiasm and alignment with the company's mission.\n"
         "- Be concise but provide specific examples (projects, internships)."
     ),
+    "algorithmic problem solving": (
+        "=== Algorithmic Problem Solving (Official Best Practices) ===\n"
+        "- Understand the Problem: Read the problem carefully. Identify inputs, outputs, constraints, and edge cases.\n"
+        "- Break It Down: Divide the problem into smaller, manageable sub-problems.\n"
+        "- Brainstorm Approaches: Start with brute force, then optimize. Consider time and space complexity trade-offs.\n"
+        "- Plan Before Coding: Outline your algorithm's steps. Choose the right data structures.\n"
+        "- Write Clean Code: Use meaningful variable names, modularize logic, and add comments for clarity.\n"
+        "- Test Thoroughly: Test with sample inputs, edge cases (empty, single element, large values), and random inputs.\n"
+        "- Think Aloud: Practice verbalizing your thought process to simulate real interview conditions."
+    ),
+    "technical communication skills": (
+        "=== Technical Communication (Official Best Practices) ===\n"
+        "- Know Your Audience: Tailor your explanation to the listener's technical level.\n"
+        "- Structure Your Thoughts: Use frameworks like STAR (Situation, Task, Action, Result) for behavioral answers.\n"
+        "- Simplify Complexity: Use analogies and real-world examples to explain complex technical concepts.\n"
+        "- Active Listening: Focus on the question before responding. Ask clarifying questions if needed.\n"
+        "- Practice Out Loud: Verbally explain your code, designs, or solutions to others or even to yourself.\n"
+        "- Seek Feedback: Regularly ask for feedback on your communication style from peers and mentors."
+    )
 }
 
 # Default outputs to ensure the application fails gracefully instead of crashing
@@ -131,12 +149,11 @@ DEFAULT_EVALUATION = {
 def _generate_content(prompt: str, json_mode: bool = False) -> str:
     """
     Internal helper to generate LLM responses using Gemini.
-    Resiliently supports both 'google-generativeai' and the newer 'google-genai' SDKs.
+    If API key is missing or quota exhausted, returns empty placeholder.
     """
     if not api_key:
-        raise ValueError("Google API key is missing. Please set GOOGLE_API_KEY or GEMINI_API_KEY in the environment.")
+        return "{}" if json_mode else ""
 
-    # Try legacy SDK first
     try:
         import google.generativeai as genai
         genai.configure(api_key=api_key)
@@ -147,27 +164,8 @@ def _generate_content(prompt: str, json_mode: bool = False) -> str:
         
         response = model.generate_content(prompt, generation_config=generation_config)
         return response.text
-    except ImportError:
-        # Fallback to the new SDK (google-genai)
-        try:
-            from google import genai
-            from google.genai import types
-            
-            client = genai.Client(api_key=api_key)
-            config = {}
-            if json_mode:
-                config["response_mime_type"] = "application/json"
-                
-            response = client.models.generate_content(
-                model=PRIMARY_MODEL,
-                contents=prompt,
-                config=types.GenerateContentConfig(**config) if config else None
-            )
-            return response.text
-        except Exception as e:
-            raise RuntimeError(f"Gemini generation failed: {e}")
-    except Exception as e:
-        raise RuntimeError(f"Gemini legacy generation failed: {e}")
+    except Exception:
+        return "{}" if json_mode else ""
 
 
 def _clean_json_response(response_text: str) -> str:
@@ -185,8 +183,6 @@ def _clean_json_response(response_text: str) -> str:
 def run_async(coro):
     """
     Helper to run asynchronous coroutines from synchronous code context.
-    Specifically handles running inside environments like Streamlit that might
-    already have an active event loop.
     """
     try:
         loop = asyncio.get_running_loop()
@@ -205,41 +201,53 @@ async def _async_retrieve_mcp_docs(topic: str) -> str:
     """
     Asynchronously queries the Google Developer Knowledge MCP server.
     """
-    dk_api_key = os.getenv("DEVELOPER_KNOWLEDGE_API_KEY") or api_key
-    if not dk_api_key:
-        raise ValueError("No API key available for Developer Knowledge MCP connection.")
+    # If no API key, return fallback cache directly
+    if not api_key:
+        topic_lower = topic.lower()
+        for key, content in CACHED_MCP_DOCS.items():
+            if key in topic_lower or topic_lower in key:
+                return content
+        return f"No local snippet available for '{topic}'. Try searching standard topics: Streamlit, Gemini, ADK, MCP, Python, Pytest, Plotly."
+
+    try:
+        dk_api_key = os.getenv("DEVELOPER_KNOWLEDGE_API_KEY") or api_key
+        mcp_url = "https://developerknowledge.googleapis.com/mcp"
         
-    mcp_url = "https://developerknowledge.googleapis.com/mcp"
-    
-    # Lazy-load mcp modules
-    from mcp.client.streamable_http import streamable_http_client
-    from mcp import ClientSession
-    from httpx import AsyncClient
-    
-    headers = {"X-Goog-Api-Key": dk_api_key}
-    async with AsyncClient(timeout=10.0, headers=headers) as http_client:
-        async with streamable_http_client(mcp_url, http_client=http_client) as (read, write, _):
-            async with ClientSession(read, write) as session:
-                await session.initialize()
-                result = await session.call_tool(
-                    "search_documents",
-                    {"query": topic}
-                )
-                
-                output_texts = []
-                if hasattr(result, "content") and result.content:
-                    for block in result.content:
-                        if hasattr(block, "text"):
-                            output_texts.append(block.text)
-                        elif isinstance(block, dict) and "text" in block:
-                            output_texts.append(block["text"])
-                        else:
-                            output_texts.append(str(block))
-                
-                if output_texts:
-                    return "\n\n".join(output_texts)
-                else:
-                    return f"No results returned from Developer Knowledge MCP for topic: '{topic}'."
+        from mcp.client.streamable_http import streamable_http_client
+        from mcp import ClientSession
+        from httpx import AsyncClient
+        
+        headers = {"X-Goog-Api-Key": dk_api_key}
+        async with AsyncClient(timeout=10.0, headers=headers) as http_client:
+            async with streamable_http_client(mcp_url, http_client=http_client) as (read, write, _):
+                async with ClientSession(read, write) as session:
+                    await session.initialize()
+                    result = await session.call_tool(
+                        "search_documents",
+                        {"query": topic}
+                    )
+                    
+                    output_texts = []
+                    if hasattr(result, "content") and result.content:
+                        for block in result.content:
+                            if hasattr(block, "text"):
+                                output_texts.append(block.text)
+                            elif isinstance(block, dict) and "text" in block:
+                                output_texts.append(block["text"])
+                            else:
+                                output_texts.append(str(block))
+                    
+                    if output_texts:
+                        return "\n\n".join(output_texts)
+                    else:
+                        return f"No results returned from Developer Knowledge MCP for topic: '{topic}'."
+    except Exception:
+        # Fallback to cache on any error
+        topic_lower = topic.lower()
+        for key, content in CACHED_MCP_DOCS.items():
+            if key in topic_lower or topic_lower in key:
+                return content
+        return f"No local snippet available for '{topic}'. Try searching standard topics: Streamlit, Gemini, ADK, MCP, Python, Pytest, Plotly."
 
 
 # ==================== Core Exposed Functions ====================
@@ -250,7 +258,6 @@ def parse_documents(resume_text: str, jd_text: str) -> dict:
     Uses keyword matching to extract skills, calculate match score, and identify gaps.
     """
     
-    # ==================== STEP 1: LOCAL SKILL EXTRACTION (No API) ====================
     # Define a broad list of common technical skills
     common_skills = [
         "python", "java", "sql", "react", "node.js", "nodejs", "git", "docker", 
@@ -271,9 +278,9 @@ def parse_documents(resume_text: str, jd_text: str) -> dict:
     
     for skill in common_skills:
         if skill in resume_lower:
-            user_skills.append(skill.title() if skill != "node.js" else "Node.js")
+            user_skills.append(skill.title() if skill not in ["node.js", "nodejs"] else "Node.js")
         if skill in jd_lower:
-            jd_skills.append(skill.title() if skill != "node.js" else "Node.js")
+            jd_skills.append(skill.title() if skill not in ["node.js", "nodejs"] else "Node.js")
     
     # If no skills are found, add placeholders to avoid empty UI
     if not user_skills:
@@ -281,8 +288,7 @@ def parse_documents(resume_text: str, jd_text: str) -> dict:
     if not jd_skills:
         jd_skills = ["Python", "DSA", "SQL", "Git", "React", "Communication"]
     
-    # ==================== STEP 2: CALCULATE MATCH SCORE ====================
-    # Match = skills that appear in BOTH lists
+    # Calculate match score
     user_skills_lower = [s.lower() for s in user_skills]
     jd_skills_lower = [s.lower() for s in jd_skills]
     
@@ -293,12 +299,10 @@ def parse_documents(resume_text: str, jd_text: str) -> dict:
         match_score = (len(matched_skills) / len(jd_skills_lower)) * 100
         match_score = round(match_score, 1)
     else:
-        match_score = 75.0  # Fallback default if no JD skills found
+        match_score = 75.0
     
-    # Ensure score is between 0 and 100
     match_score = max(0, min(100, match_score))
     
-    # ==================== STEP 3: RETURN STRUCTURED RESULT ====================
     return {
         "user_skills": user_skills,
         "experience": ["B.Tech CSE Student", "Open Source Contributor"],
@@ -306,74 +310,48 @@ def parse_documents(resume_text: str, jd_text: str) -> dict:
         "certifications": ["Google Cloud Certified Architect (Optional)"],
         "jd_requirements": jd_skills,
         "jd_responsibilities": ["Develop software", "Collaborate with teams", "Solve problems"],
-        "missing_skills": [s.title() for s in missing_skills] if missing_skills else [],
+        "missing_skills": missing_skills if missing_skills else [],
         "resume_match_score": match_score
     }
 
 
 def generate_questions(profile: dict, jd_profile: dict, history: list) -> list:
     """
-    Generate exactly 5 interview questions using Gemini based on the candidate's profile,
-    job description requirements, and optional history (with past evaluations/scores).
-    
-    Args:
-        profile (dict): The parsed candidate profile dictionary (from parse_documents).
-        jd_profile (dict): The parsed job description requirements.
-        history (list): List of previous question-answer logs or scores.
-        
-    Returns:
-        list: A Python list of exactly 5 question strings.
+    Generate exactly 5 interview questions using Gemini if available, fallback otherwise.
     """
-    prompt = f"""
-    You are an expert technical interviewer.
-    Generate exactly 5 high-quality, professional mock interview questions tailored for the candidate.
+    # Try Gemini if API key exists
+    if api_key:
+        try:
+            prompt = f"""
+            You are an expert technical interviewer.
+            Generate exactly 5 high-quality, professional mock interview questions tailored for the candidate.
+            
+            Candidate Profile:
+            {json.dumps(profile, indent=2)}
+            
+            Job Description:
+            {json.dumps(jd_profile, indent=2)}
+            
+            Return ONLY a JSON array of 5 strings: ["Q1", "Q2", "Q3", "Q4", "Q5"]
+            """
+            response_text = _generate_content(prompt, json_mode=True)
+            if response_text and response_text != "{}":
+                cleaned = _clean_json_response(response_text)
+                questions = json.loads(cleaned)
+                if isinstance(questions, list) and len(questions) > 0:
+                    return [str(q) for q in questions[:5]]
+        except Exception:
+            pass
     
-    Candidate Profile Details:
-    {json.dumps(profile, indent=2)}
-    
-    Job Description Details:
-    {json.dumps(jd_profile, indent=2)}
-    
-    Conversation/Evaluation History:
-    {json.dumps(history, indent=2)}
-    
-    Requirements:
-    - Return exactly 5 questions.
-    - The questions must be a mix of:
-      1. Technical questions (testing specific technical skills listed or missing).
-      2. Behavioral questions (e.g., handling conflicts, leadership, soft skills).
-      3. Scenario-based/situational questions (e.g., "How would you design X given constraints Y?").
-    - If previous scores or question evaluations are present in the History, adapt the difficulty. For example:
-      - If the candidate performed poorly on a topic, ask a simpler follow-up or test a different core skill.
-      - If the candidate performed exceptionally, ask more challenging, senior-level questions.
-    - Format output as a JSON array of 5 strings. Example format:
-      ["Question 1", "Question 2", "Question 3", "Question 4", "Question 5"]
-      
-    Provide ONLY the valid JSON list. No markdown wrappers or additional text outside the JSON.
-    """
-    try:
-        response_text = _generate_content(prompt, json_mode=True)
-        cleaned_json = _clean_json_response(response_text)
-        questions = json.loads(cleaned_json)
-        
-        if isinstance(questions, list) and len(questions) > 0:
-            if len(questions) < 5:
-                # Pad to 5 if model generated fewer
-                questions.extend(DEFAULT_QUESTIONS[len(questions):])
-            return [str(q) for q in questions[:5]]
-        return DEFAULT_QUESTIONS
-    except Exception as e:
-        return DEFAULT_QUESTIONS
+    # Fallback questions
+    return DEFAULT_QUESTIONS.copy()
 
 
 def evaluate_answer(question: str, answer: str, topic: str) -> dict:
     """
     Evaluate the candidate's answer locally (bypasses Gemini API).
-    This is a fallback when API quota is exhausted.
+    Uses length, keywords, and structure to score answers.
     """
-    
-    # ==================== LOCAL EVALUATION (BYPASSES GEMINI) ====================
-    # Calculate score based on answer length, keywords, and structure
     
     score = 5
     strengths = []
@@ -399,7 +377,7 @@ def evaluate_answer(question: str, answer: str, topic: str) -> dict:
         feedback = "Excellent detailed answer! You covered the key points effectively."
         strengths.append("Comprehensive and well-articulated response.")
     
-    # 2. Check for key structural elements (STAR method, technical terms)
+    # 2. Check for key structural elements
     if "STAR" in answer or "Situation" in answer or "Task" in answer:
         score = min(score + 1, 10)
         strengths.append("Used STAR method effectively.")
@@ -414,65 +392,46 @@ def evaluate_answer(question: str, answer: str, topic: str) -> dict:
     if "team" in answer.lower() or "collaborate" in answer.lower():
         strengths.append("Highlighted teamwork and collaboration.")
     
-    # 3. Check for specific technical keywords (common interview topics)
-    tech_keywords = ["python", "java", "sql", "react", "node", "git", "docker", "api", "database", "cloud", "aws", "azure"]
+    # 3. Check for technical keywords
+    tech_keywords = ["python", "java", "sql", "react", "node", "git", "docker", "api", "database", "cloud"]
     found_tech = [kw for kw in tech_keywords if kw in answer.lower()]
     if found_tech:
         strengths.append(f"Mentioned relevant technologies: {', '.join(found_tech)}")
         score = min(score + 1, 10)
     
-    # 4. Penalize if answer is too generic or empty
-    if "hello" in answer.lower() and "my name" in answer.lower():
-        # The answer is more than just a greeting
-        pass
-    
-    if not answer or len(answer) < 5:
-        score = 2
-        feedback = "No meaningful answer provided. Please answer the question."
-        weaknesses.append("Empty or invalid answer.")
-    
-    # 5. Ensure strengths and weaknesses are lists
+    # 4. Ensure strengths and weaknesses are lists
     if not strengths:
         strengths = ["Answer was submitted."]
     if not weaknesses:
         weaknesses = ["Unable to analyze weaknesses."]
     
-    # 6. Get official docs (fallback cache)
+    # 5. Get official docs
     official_docs = retrieve_mcp_docs(topic)
     
-    # 7. Build the final result
+    # 6. Build the final result
     result = {
         "score": score,
         "feedback": feedback or "Your answer has been evaluated successfully.",
         "improvement_tip": "Always structure your answers clearly. Use the STAR method for behavioral questions. Back up your points with specific examples and technical details.",
-        "strengths": strengths[:5],  # Max 5 strengths
-        "weaknesses": weaknesses[:5],  # Max 5 weaknesses
+        "strengths": strengths[:5],
+        "weaknesses": weaknesses[:5],
         "recommended_topic": topic or "General",
         "official_docs": official_docs
     }
     
-    # Ensure score is within 1-10 range
     result["score"] = max(1, min(10, result["score"]))
-    
     return result
+
 
 def retrieve_mcp_docs(topic: str) -> str:
     """
     Attempt to retrieve official documentation using the Google Developer Knowledge MCP server.
-    If the MCP server is unavailable or returns an error, gracefully fall back to a predefined 
-    dictionary of cached documentation snippets.
-    
-    Args:
-        topic (str): The technical topic or query to search for.
-        
-    Returns:
-        str: Formatted documentation content.
+    If the MCP server is unavailable, gracefully fall back to cache.
     """
     try:
         result = run_async(_async_retrieve_mcp_docs(topic))
         return f"=== Developer Knowledge MCP Search Results for '{topic}' ===\n\n{result}"
     except Exception as e:
-        # Format offline fallback output if MCP is unavailable
         topic_lower = topic.lower()
         matched_content = []
         for key, content in CACHED_MCP_DOCS.items():
@@ -482,13 +441,10 @@ def retrieve_mcp_docs(topic: str) -> str:
         if matched_content:
             fallback_text = "\n\n".join(matched_content)
         else:
-            fallback_text = (
-                f"No local snippet available for '{topic}'.\n"
-                f"Try searching standard topics: Streamlit, Gemini, ADK, MCP, Python, Pytest, Plotly."
-            )
+            fallback_text = f"No local snippet available for '{topic}'. Try searching standard topics: Streamlit, Gemini, ADK, MCP, Python, Pytest, Plotly."
             
         return (
             f"=== Developer Knowledge MCP Offline (Fallback) ===\n"
-            f"Note: Remote MCP server search for '{topic}' was unavailable ({e}).\n\n"
+            f"Note: Remote MCP server search for '{topic}' was unavailable.\n\n"
             f"{fallback_text}"
         )
