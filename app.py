@@ -319,73 +319,74 @@ if selected_page != st.session_state.current_page:
     st.rerun()
 
 
-# Helper to generate AI roadmap items
+# Helper to generate learning plan (local fallback - no API calls)
 def generate_learning_plan_with_gemini(weak_topics):
-    """Uses Gemini via helper tools to create a personalized study syllabus."""
-    if not weak_topics:
-        weak_topics = ["Advanced Python & System Design"]
-
-    prompt = f"""
-    You are an expert technical mentor.
-
-    Create a personalized learning plan for a candidate wanting to improve on the following weak areas:
-
-    {", ".join(weak_topics)}
-
-    Return ONLY valid JSON.
-
-    The response must be a JSON array.
-
-    Each object must contain exactly these fields:
-
-    - topic
-    - why_it_matters
-    - learning_path
-
-    Rules:
-    - Return plain text only.
-    - Do NOT generate HTML.
-    - Do NOT generate Markdown.
-    - Do NOT include <div>, <p>, <h1>, <style>, <span>, or any HTML tags.
-    - Do NOT include inline CSS.
-    - The values must be human-readable text.
-
-    Example:
-
-    [
-      {{
-        "topic": "Python",
-        "why_it_matters": "Python is essential for backend development, automation, AI, and technical interviews.",
-        "learning_path": "1. Learn Python syntax\\n2. Practice functions and OOP\\n3. Solve DSA problems\\n4. Build projects"
-      }}
-    ]
     """
-    try:
-        from tools.agent_tools import _generate_content, _clean_json_response
-        response_text = _generate_content(prompt, json_mode=True)
-        cleaned = _clean_json_response(response_text)
-
-        import re
-
-        plan = json.loads(cleaned)
-
-        for item in plan:
-            if "why_it_matters" in item:
-                item["why_it_matters"] = re.sub(r"<[^>]+>", "", item["why_it_matters"])
-
-            if "learning_path" in item:
-                item["learning_path"] = re.sub(r"<[^>]+>", "", item["learning_path"])
-
-        return plan
-    except Exception:
-        fallback = []
-        for topic in weak_topics:
-            fallback.append({
+    Generates a personalized learning plan locally (no API calls).
+    Uses predefined roadmaps based on weak topics.
+    """
+    # If no weak topics are provided, use defaults
+    if not weak_topics:
+        weak_topics = ["Data Structures & Algorithms", "System Design", "Communication Skills"]
+    
+    # Predefined learning roadmaps for common topics
+    roadmap_templates = {
+        "data structures": {
+            "topic": "Data Structures & Algorithms",
+            "why_it_matters": "DSA is the foundation of efficient software development and technical interviews.",
+            "learning_path": "1. Master Arrays, Linked Lists, Stacks, Queues, Hash Maps\n2. Learn Trees (BST, AVL), Graphs, Heaps\n3. Practice Sorting (Merge, Quick) and Searching (Binary Search)\n4. Study Recursion, DP, and Greedy Algorithms\n5. Solve problems on LeetCode (Easy → Medium → Hard)\n6. Analyze time and space complexity for every solution"
+        },
+        "algorithms": {
+            "topic": "Algorithms & Problem Solving",
+            "why_it_matters": "Strong algorithmic thinking helps you solve complex problems efficiently.",
+            "learning_path": "1. Break problems into smaller sub-problems\n2. Practice Divide & Conquer, Backtracking\n3. Study Dynamic Programming patterns (Knapsack, LCS)\n4. Learn Graph algorithms (BFS, DFS, Dijkstra's)\n5. Participate in coding contests on Codeforces or LeetCode\n6. Review and learn from editorial solutions"
+        },
+        "communication": {
+            "topic": "Technical Communication Skills",
+            "why_it_matters": "Clear communication is essential for collaboration and interview success.",
+            "learning_path": "1. Practice explaining technical concepts to non-technical audiences\n2. Use the STAR method for behavioral answers\n3. Participate in mock interviews with peers\n4. Write clear documentation and code comments\n5. Practice active listening and asking clarifying questions\n6. Seek feedback on your communication style"
+        },
+        "system design": {
+            "topic": "System Design & Architecture",
+            "why_it_matters": "Designing scalable systems is critical for senior engineering roles.",
+            "learning_path": "1. Understand core concepts: load balancing, caching, databases\n2. Study CAP theorem and trade-offs in distributed systems\n3. Design real-world systems (URL shortener, chat app, etc.)\n4. Learn about microservices vs monolithic architecture\n5. Practice with system design interview questions\n6. Study case studies of large-scale systems (Google, Netflix)"
+        },
+        "python": {
+            "topic": "Python Development",
+            "why_it_matters": "Python is widely used for backend, data science, and AI development.",
+            "learning_path": "1. Master Python syntax, data structures, and OOP\n2. Learn advanced topics: decorators, generators, context managers\n3. Study asyncio and concurrent programming\n4. Practice with popular libraries (FastAPI, Django, Pandas)\n5. Write clean, PEP 8 compliant code\n6. Build projects to apply your knowledge"
+        },
+        "sql": {
+            "topic": "SQL & Database Management",
+            "why_it_matters": "SQL is essential for data-driven applications and backend development.",
+            "learning_path": "1. Master SELECT, INSERT, UPDATE, DELETE queries\n2. Learn JOINs, subqueries, and window functions\n3. Study database design and normalization\n4. Practice query optimization and indexing\n5. Work with both SQL (PostgreSQL, MySQL) and NoSQL (MongoDB)\n6. Build projects with real databases"
+        },
+        "react": {
+            "topic": "React & Frontend Development",
+            "why_it_matters": "React is the most popular frontend library for building interactive UIs.",
+            "learning_path": "1. Master components, props, and state\n2. Learn hooks (useState, useEffect, useContext)\n3. Study state management (Redux, Context API)\n4. Practice routing with React Router\n5. Build responsive UIs with Tailwind CSS or Material-UI\n6. Learn performance optimization techniques (memo, useCallback)"
+        }
+    }
+    
+    # Generate learning plan based on weak topics
+    learning_plan = []
+    for topic in weak_topics:
+        topic_lower = topic.lower()
+        matched = False
+        for key, template in roadmap_templates.items():
+            if key in topic_lower:
+                learning_plan.append(template)
+                matched = True
+                break
+        if not matched:
+            # Generic fallback for unrecognized topics
+            learning_plan.append({
                 "topic": topic,
-                "why_it_matters": f"Mastery of {topic} is critical to developing scalable, high-performance developer systems.",
-                "learning_path": "1. Review official developer documentation.\n2. Work on small, targeted prototype projects.\n3. Take courses or read articles highlighting best practices."
+                "why_it_matters": f"Mastering {topic} will help you grow as a software engineer and advance your career.",
+                "learning_path": f"1. Understand the core concepts of {topic}\n2. Practice with hands-on projects\n3. Study best practices and common pitfalls\n4. Review official documentation regularly\n5. Join communities and discuss with peers\n6. Apply your knowledge in real-world scenarios"
             })
-        return fallback
+    
+    return learning_plan
 
 
 # ==================== PAGE 1: HOME PAGE ====================
